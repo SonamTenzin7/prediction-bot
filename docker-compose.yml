@@ -1,0 +1,44 @@
+version: "3.9"
+
+services:
+  # ── Bot engine (runs 24/7) ─────────────────────────────────────────────────
+  bot:
+    build: .
+    container_name: predict-bot
+    restart: unless-stopped # auto-restart on crash or reboot
+    env_file: .env
+    volumes:
+      - ./signal_log.jsonl:/app/signal_log.jsonl
+      - ./wallets_cache.json:/app/wallets_cache.json
+      - ./bot.log:/app/bot.log
+      - ./paper_trades.jsonl:/app/paper_trades.jsonl
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Streamlit dashboard ────────────────────────────────────────────────────
+  dashboard:
+    build: .
+    container_name: predict-dashboard
+    restart: unless-stopped
+    env_file: .env
+    command:
+      [
+        "streamlit",
+        "run",
+        "app.py",
+        "--server.port=8501",
+        "--server.address=0.0.0.0",
+        "--server.headless=true",
+      ]
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./signal_log.jsonl:/app/signal_log.jsonl
+      - ./wallets_cache.json:/app/wallets_cache.json
+      - ./bot.log:/app/bot.log
+      - ./paper_trades.jsonl:/app/paper_trades.jsonl
+    depends_on:
+      - bot

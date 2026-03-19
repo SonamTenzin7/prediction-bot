@@ -1,0 +1,18 @@
+[Unit]
+Description=Polymarket BTC Predict Bot
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/predict-bot
+ExecStart=/home/ubuntu/predict-bot/venv/bin/python3 -u bot.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/ubuntu/predict-bot/bot.log
+StandardError=append:/home/ubuntu/predict-bot/bot.log
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
