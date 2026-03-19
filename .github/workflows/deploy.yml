@@ -1,0 +1,53 @@
+name: Run Predict Bot
+
+on:
+  schedule:
+    # Runs every 6 hours — 4 times a day (UTC)
+    # GitHub Actions has a 6h max job timeout; bot runs for 5h50m then exits cleanly.
+    - cron: "0 0 * * *" # 00:00 UTC
+    - cron: "0 6 * * *" # 06:00 UTC
+    - cron: "0 12 * * *" # 12:00 UTC
+    - cron: "0 18 * * *" # 18:00 UTC
+  workflow_dispatch: # allow manual trigger from GitHub UI
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # Run the bot directly on the GitHub Actions runner (no VPS / Docker needed)
+  # ──────────────────────────────────────────────────────────────────────────
+  run-bot:
+    name: Run Bot (up to 5h 50m)
+    runs-on: ubuntu-latest
+    timeout-minutes: 350 # 5h 50m — safely under GitHub's 6h hard limit
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Create runtime data files
+        run: touch signal_log.jsonl wallets_cache.json bot.log paper_trades.jsonl
+
+      - name: Write .env from GitHub Secrets
+        run: |
+          cat <<'EOF' > .env
+          TRADING_MODE=${{ secrets.TRADING_MODE }}
+          TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}
+          POLYMARKET_API_KEY=${{ secrets.POLYMARKET_API_KEY }}
+          POLYMARKET_SECRET=${{ secrets.POLYMARKET_SECRET }}
+          POLYMARKET_PASSPHRASE=${{ secrets.POLYMARKET_PASSPHRASE }}
+          PRIVATE_KEY=${{ secrets.PRIVATE_KEY }}
+          EOF
+
+      - name: Run bot (with 5h 50m timeout)
+        # 'timeout' sends SIGTERM after 21000s (5h 50m) so the process exits cleanly
+        # before GitHub kills the runner at 6h
+        run: timeout 21000 python -u bot.py || true
