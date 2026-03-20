@@ -257,24 +257,38 @@ class SignalEngine:
         copy_signal   = None
         copy_win_rate = 0.0
         if self.copy_engine:
-            latest = self.copy_engine.get_latest_signal()
-            if latest:
-                slug_ts   = int(slug.split("-")[-1])
-                signal_ts = int(latest.market_slug.split("-")[-1]) if latest.market_slug else 0
-                slug_match = abs(slug_ts - signal_ts) <= 600   # within 2 windows
-                age_ok     = latest.age_seconds < 590          # full window tolerance
-                if slug_match and age_ok:
-                    copy_signal   = latest
-                    copy_win_rate = self.copy_engine._get_wallet_win_rate(latest.wallet)
-                    logging.info(
-                        f"[Predict] ✅ Using COPY signal: {latest.direction} from "
-                        f"{latest.wallet[:10]}... (win_rate={copy_win_rate:.0%}, age={latest.age_seconds:.0f}s)"
-                    )
-                else:
-                    logging.debug(
-                        f"[Predict] Copy signal skipped: slug_match={slug_match} "
-                        f"age={latest.age_seconds:.0f}s (need <590s)"
-                    )
+            # Use slug-keyed lookup — no age-decay problem.
+            # The copy engine stores whale trades by window slug; we just ask
+            # "did any top wallet bet on THIS window?" and use that directly.
+            copy_signal = self.copy_engine.get_signal_for_slug(slug)
+            if copy_signal:
+                copy_win_rate = self.copy_engine._get_wallet_win_rate(copy_signal.wallet)
+                logging.info(
+                    f"[Predict] ✅ COPY signal for {slug}: {copy_signal.direction} "
+                    f"from {copy_signal.wallet[:10]}… "
+                    f"(win_rate={copy_win_rate:.0%}, age={copy_signal.age_seconds:.0f}s)"
+                )
+            else:
+                # Fallback: check latest_signal with a loose 2-window age tolerance
+                # (catches cases where the whale traded just before our prediction fires)
+                latest = self.copy_engine.get_latest_signal()
+                if latest:
+                    try:
+                        slug_ts   = int(slug.split("-")[-1])
+                        signal_ts = int(latest.market_slug.split("-")[-1]) if latest.market_slug else 0
+                        slug_match = abs(slug_ts - signal_ts) <= 600
+                    except Exception:
+                        slug_match = False
+                    if slug_match:
+                        copy_signal   = latest
+                        copy_win_rate = self.copy_engine._get_wallet_win_rate(latest.wallet)
+                        logging.info(
+                            f"[Predict] ✅ COPY signal (latest fallback) for {slug}: "
+                            f"{latest.direction} from {latest.wallet[:10]}… "
+                            f"(win_rate={copy_win_rate:.0%}, age={latest.age_seconds:.0f}s)"
+                        )
+                    else:
+                        logging.debug(f"[Predict] No copy signal for {slug}")
 
         # ── Build candle list (cap to 30 most recent) ─────────────────────────
         all_candles = list(self.candles)
