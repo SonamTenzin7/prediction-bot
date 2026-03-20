@@ -16,8 +16,8 @@ class WalletScanner:
         self.trades_url = "https://data-api.polymarket.com/trades"
         self.activity_url = "https://data-api.polymarket.com/activity"
         self.cache_file = "wallets_cache.json"
-        self.min_win_rate = float(os.getenv("MIN_WIN_RATE", 0.70))
-        self.min_trades = int(os.getenv("MIN_TRADES_TO_QUALIFY", 10))
+        self.min_win_rate = float(os.getenv("MIN_WIN_RATE", 0.60))
+        self.min_trades = int(os.getenv("MIN_TRADES_TO_QUALIFY", 20))
         self.top_wallet = None
         self.leaderboard = []
         # Load cached leaderboard immediately so the copy engine has wallets
@@ -55,8 +55,11 @@ class WalletScanner:
                 async with session.get(url) as response:
                     if response.status == 200:
                         trades = await response.json()
-                        # Filter for BTC markets only
-                        return [t for t in trades if self.is_btc_market(t.get("title", ""))]
+                        # Filter for BTC 5-minute markets only — NOT monthly/weekly BTC markets
+                        return [
+                            t for t in trades
+                            if re.match(r"btc-updown-5m-\d+", t.get("slug", ""))
+                        ]
                     else:
                         logging.error(f"Trades API error: {response.status} at {url}")
                         return []
@@ -145,10 +148,12 @@ class WalletScanner:
         if not activity:
             return {}
 
-        # Only consider BTC market events within the lookback window
+        # Only consider BTC 5-MINUTE market events within the lookback window.
+        # Filtering by slug pattern (btc-updown-5m-*) ensures we don't count wins
+        # from long-duration BTC markets (monthly/weekly) which inflate win rates.
         btc_activity = [
             a for a in activity
-            if self.is_btc_market(a.get("title", ""))
+            if self.is_btc_5m_market(a.get("title", ""), a.get("slug", ""))
             and float(a.get("timestamp", 0)) >= cutoff
         ]
         if not btc_activity:
@@ -183,6 +188,12 @@ class WalletScanner:
             "last_active": last_active,
             "sizes": [s for s in sizes if s > 0],
         }
+
+    def is_btc_5m_market(self, text: str, slug: str = "") -> bool:
+        """Only count BTC 5-minute up/down markets — NOT monthly/weekly BTC markets."""
+        if slug and re.match(r"btc-updown-5m-\d+", slug):
+            return True
+        return bool(re.search(r"btc.*5.?min|bitcoin.*5.?min|btc.*up.*down|bitcoin.*up.*down", text, re.I))
 
     def is_btc_market(self, text: str) -> bool:
         return bool(re.search(r"(btc|bitcoin)", text, re.I))
