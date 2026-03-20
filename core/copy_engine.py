@@ -54,15 +54,6 @@ class CopyEngine:
         self._last_trade_ts: Dict[str, float] = {}
         self._init_ts: float = time.time()   # used to seed per-wallet watermarks
         self.signal_queue: asyncio.Queue = asyncio.Queue()
-
-        # Slug-keyed signal store: {slug -> CopySignal}
-        # Stores the strongest (highest win-rate wallet) signal seen per window slug.
-        # Expires automatically when the window closes (now >= window_open + 300).
-        # This avoids the age-decay problem — a whale trade from 8 min ago for the
-        # CURRENT window is still valid; we just need to match it by slug.
-        self.signals_by_slug: Dict[str, "CopySignal"] = {}
-
-        # Keep latest_signal for backwards compat / Telegram copy alert
         self.latest_signal: Optional[CopySignal] = None
         self._headers = {
             "User-Agent": (
@@ -78,30 +69,6 @@ class CopyEngine:
             now = time.time()
             self.latest_signal.age_seconds = now - self.latest_signal.timestamp
         return self.latest_signal
-
-    def get_signal_for_slug(self, slug: str) -> Optional[CopySignal]:
-        """
-        Return the stored copy signal for a specific window slug, if one exists
-        and the window has not yet closed.
-        This is the primary lookup used by signal_engine — slug-matched so there
-        is no age-decay problem. A whale trade placed 8 min ago for the current
-        window is still valid as long as the window is open.
-        """
-        now = time.time()
-        # Expire any closed windows from the store
-        closed = [s for s in list(self.signals_by_slug)
-                  if now >= int(s.split("-")[-1]) + 300]
-        for s in closed:
-            del self.signals_by_slug[s]
-
-        signal = self.signals_by_slug.get(slug)
-        if signal:
-            signal.age_seconds = now - signal.timestamp
-            logging.debug(
-                f"CopyEngine: found slug-matched signal for {slug}: "
-                f"{signal.direction} from {signal.wallet[:10]}… age={signal.age_seconds:.0f}s"
-            )
-        return signal
 
     # ── Main loop ─────────────────────────────────────────────────────────────
 
@@ -157,11 +124,10 @@ class CopyEngine:
         if not trades:
             return
 
-        # Seed the watermark on first poll.
-        # Look back 600s (2 windows) so we populate signals_by_slug for any
-        # currently-open window whose trade was placed before we started.
+        # Seed the watermark on first poll to "now - 300s" so we only capture
+        # trades from the last 5 min, not the wallet's entire history.
         if wallet not in self._last_trade_ts:
-            self._last_trade_ts[wallet] = self._init_ts - 600.0
+            self._last_trade_ts[wallet] = self._init_ts - 300.0
 
         last_seen = self._last_trade_ts.get(wallet, 0.0)
         new_trades = []
@@ -193,23 +159,24 @@ class CopyEngine:
 
     async def _emit_signal(self, trade: Dict, wallet: str, ts: float):
         """
-        Convert a raw trade record into a CopySignal and store it.
-        Stored by slug so signal_engine can look it up at prediction time
-        without any age-decay problem.
+        Convert a raw trade record into a CopySignal and put it on the queue.
+        Also sends a Telegram notification.
         """
-        now  = time.time()
-        age  = now - ts
-        slug = trade.get("slug", "") or trade.get("market_slug", "")
+        now = time.time()
+        age = now - ts
+        if age > 590:
+            # Stale — older than one full 5-min window (300s) + grace (290s), skip
+            logging.debug(f"CopyEngine: skipping stale trade ({age:.0f}s old) from {wallet[:10]}…")
+            return
 
-        # Drop if the window has already closed — no point copying a finished market
+        slug     = trade.get("slug", "") or trade.get("market_slug", "")
+        
+        # Determine if the market has already closed
         try:
-            window_open  = int(slug.split("-")[-1])
+            window_open = int(slug.split("-")[-1])
             window_close = window_open + 300
             if now >= window_close:
-                logging.debug(
-                    f"CopyEngine: skipping trade for closed window {slug} "
-                    f"(closed {now - window_close:.0f}s ago)"
-                )
+                logging.debug(f"CopyEngine: skipping trade because window {slug} has already closed.")
                 return
         except Exception:
             pass
@@ -241,26 +208,15 @@ class CopyEngine:
             timestamp=ts,
             age_seconds=age,
         )
-
-        # Store by slug — keeps the best (highest win-rate) signal per window.
-        # If two wallets both trade the same window, the first one wins unless
-        # the new wallet has a strictly higher win-rate.
-        existing = self.signals_by_slug.get(slug)
-        new_wr   = self._get_wallet_win_rate(wallet)
-        old_wr   = self._get_wallet_win_rate(existing.wallet) if existing else 0.0
-        if existing is None or new_wr >= old_wr:
-            self.signals_by_slug[slug] = signal
-            logging.info(
-                f"📋 CopySignal stored: {direction} for {slug} | "
-                f"wallet={wallet[:10]}… | win_rate={new_wr:.0%} | "
-                f"size=${size:.2f} @ {price:.3f} | age={age:.0f}s"
-            )
-
-        # Also keep latest_signal for Telegram copy alert & backwards compat
         self.latest_signal = signal
         await self.signal_queue.put(signal)
 
         win_rate = self._get_wallet_win_rate(wallet)
+        logging.info(
+            f"📋 CopySignal: {direction} on {slug} | "
+            f"wallet={wallet[:10]}… | win_rate={win_rate:.0%} | "
+            f"size=${size:.2f} @ {price:.3f} | age={age:.0f}s"
+        )
         await self._send_copy_telegram(signal, win_rate)
 
     # ── Telegram ──────────────────────────────────────────────────────────────
