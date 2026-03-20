@@ -1,1 +1,75 @@
-{"leaderboard": []}
+{
+  "saved_at": 1773999446.41203,
+  "leaderboard": [
+    {
+      "address": "0x9b7b1207b1b3bdc5ff9fd66a597237a73d1d4038",
+      "win_rate": 0.9897959183673469,
+      "total_trades": 98,
+      "avg_size": 77.7177900408163,
+      "last_active": "2026-03-20T09:34:39+00:00"
+    },
+    {
+      "address": "0xa74614e0536b31da8a2f4295aa9b9078c0b66975",
+      "win_rate": 0.9767441860465116,
+      "total_trades": 86,
+      "avg_size": 6.906137867256642,
+      "last_active": "2026-03-20T09:36:07+00:00"
+    },
+    {
+      "address": "0xf134ccb545a584768fd44a222eb68b535c79dae2",
+      "win_rate": 0.9680851063829787,
+      "total_trades": 94,
+      "avg_size": 18.78134666981132,
+      "last_active": "2026-03-20T09:34:35+00:00"
+    },
+    {
+      "address": "0xf91b7fb260ec2b6ac5211a5a82202697e1ac79a8",
+      "win_rate": 0.9662921348314607,
+      "total_trades": 89,
+      "avg_size": 14.735232242424242,
+      "last_active": "2026-03-20T09:36:49+00:00"
+    },
+    {
+      "address": "0x6f0d658de846a86cb95ea7d15f5a46a01ab27777",
+      "win_rate": 0.9565217391304348,
+      "total_trades": 46,
+      "avg_size": 5.261503250000001,
+      "last_active": "2026-03-20T09:34:37+00:00"
+    },
+    {
+      "address": "0x85252c81d61b91db29c371069b560d55f7a3c473",
+      "win_rate": 0.9565217391304348,
+      "total_trades": 23,
+      "avg_size": 5.686051173913045,
+      "last_active": "2026-03-20T09:34:37+00:00"
+    },
+    {
+      "address": "0xd16027aea06a64d811c1eadbdd1d6db1388fff96",
+      "win_rate": 0.9560439560439561,
+      "total_trades": 91,
+      "avg_size": 5.9341387128712935,
+      "last_active": "2026-03-20T09:36:05+00:00"
+    },
+    {
+      "address": "0x55eb82259c898d7041a43dcf04382d6619a83379",
+      "win_rate": 0.95,
+      "total_trades": 20,
+      "avg_size": 5.357598370370372,
+      "last_active": "2026-03-20T09:34:35+00:00"
+    },
+    {
+      "address": "0x39808cc2d3e177debafbf12973a7ef179926ae74",
+      "win_rate": 0.9466666666666667,
+      "total_trades": 75,
+      "avg_size": 10.428825935483871,
+      "last_active": "2026-03-20T09:34:45+00:00"
+    },
+    {
+      "address": "0x1ab0a13c67786b3e38777bef14c0cb63cf341c48",
+      "win_rate": 0.9444444444444444,
+      "total_trades": 18,
+      "avg_size": 5.878842555555557,
+      "last_active": "2026-03-20T09:34:37+00:00"
+    }
+  ]
+}

@@ -17,7 +17,7 @@ class WalletScanner:
         self.activity_url = "https://data-api.polymarket.com/activity"
         self.cache_file = "wallets_cache.json"
         self.min_win_rate = float(os.getenv("MIN_WIN_RATE", 0.60))
-        self.min_trades = int(os.getenv("MIN_TRADES_TO_QUALIFY", 20))
+        self.min_trades = int(os.getenv("MIN_TRADES_TO_QUALIFY", 15))
         self.top_wallet = None
         self.leaderboard = []
         # Load cached leaderboard immediately so the copy engine has wallets
@@ -214,7 +214,7 @@ class WalletScanner:
 
             if (total >= self.min_trades
                     and s.get("last_active", 0) >= stale_cutoff
-                    and avg_size >= 5.0
+                    and avg_size >= 2.0
                     and win_rate >= self.min_win_rate):
                 qualified.append({
                     "address": addr,
