@@ -1,6 +1,8 @@
 name: Run Predict Bot
 
 on:
+  push:
+    branches: [main]   # restart bot immediately on every push to main
   schedule:
     # Runs every 6 hours — 4 times a day (UTC)
     # GitHub Actions has a 6h max job timeout; bot runs for 5h50m then exits cleanly.

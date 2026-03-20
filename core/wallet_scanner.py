@@ -16,14 +16,33 @@ class WalletScanner:
         self.trades_url = "https://data-api.polymarket.com/trades"
         self.activity_url = "https://data-api.polymarket.com/activity"
         self.cache_file = "wallets_cache.json"
-        self.min_win_rate = float(os.getenv("MIN_WIN_RATE", 0.80))
+        self.min_win_rate = float(os.getenv("MIN_WIN_RATE", 0.70))
         self.min_trades = int(os.getenv("MIN_TRADES_TO_QUALIFY", 10))
         self.top_wallet = None
         self.leaderboard = []
+        # Load cached leaderboard immediately so the copy engine has wallets
+        # available from the very first second — before the first rescan completes.
+        self._load_cache()
         self.headers = {
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                           "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
+
+    def _load_cache(self):
+        """Load the leaderboard from disk cache on startup (sync, no await needed)."""
+        try:
+            if os.path.exists(self.cache_file):
+                with open(self.cache_file) as f:
+                    data = json.load(f)
+                self.leaderboard = data.get("leaderboard", [])
+                if self.leaderboard:
+                    self.top_wallet = self.leaderboard[0]["address"]
+                    logging.info(
+                        f"WalletScanner: loaded {len(self.leaderboard)} wallets from cache. "
+                        f"Top: {self.top_wallet[:10]}… ({self.leaderboard[0]['win_rate']:.0%} WR)"
+                    )
+        except Exception as e:
+            logging.warning(f"WalletScanner: could not load cache: {e}")
 
     async def fetch_recent_btc_trades(self, limit: int = 500) -> List[Dict]:
         """

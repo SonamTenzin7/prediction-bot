@@ -44,12 +44,15 @@ class CopyEngine:
     """
 
     DATA_API = "https://data-api.polymarket.com"
-    POLL_INTERVAL = 12   # seconds between polls
+    POLL_INTERVAL = 6   # poll every 6s — faster catch of whale trades
 
     def __init__(self, scanner=None):
         self.scanner = scanner
-        # Track last trade seen per wallet so we don't re-fire on old trades
+        # Track last trade seen per wallet so we don't re-fire on old trades.
+        # Initialised lazily per-wallet to (now - 300) so that on first poll we
+        # only pick up trades placed in the last 5 minutes (not stale history).
         self._last_trade_ts: Dict[str, float] = {}
+        self._init_ts: float = time.time()   # used to seed per-wallet watermarks
         self.signal_queue: asyncio.Queue = asyncio.Queue()
         self.latest_signal: Optional[CopySignal] = None
         self._headers = {
@@ -79,8 +82,8 @@ class CopyEngine:
         while True:
             wallets = self._get_target_wallets()
             if not wallets:
-                logging.debug("CopyEngine: no qualified wallets yet, waiting 60s…")
-                await asyncio.sleep(60)
+                logging.debug("CopyEngine: no qualified wallets yet, waiting 15s…")
+                await asyncio.sleep(15)
                 continue
 
             for wallet in wallets:
@@ -121,6 +124,11 @@ class CopyEngine:
         if not trades:
             return
 
+        # Seed the watermark on first poll to "now - 300s" so we only capture
+        # trades from the last 5 min, not the wallet's entire history.
+        if wallet not in self._last_trade_ts:
+            self._last_trade_ts[wallet] = self._init_ts - 300.0
+
         last_seen = self._last_trade_ts.get(wallet, 0.0)
         new_trades = []
 
@@ -156,12 +164,23 @@ class CopyEngine:
         """
         now = time.time()
         age = now - ts
-        if age > 270:
-            # Stale — older than one full window, skip
+        if age > 590:
+            # Stale — older than one full 5-min window (300s) + grace (290s), skip
             logging.debug(f"CopyEngine: skipping stale trade ({age:.0f}s old) from {wallet[:10]}…")
             return
 
         slug     = trade.get("slug", "") or trade.get("market_slug", "")
+        
+        # Determine if the market has already closed
+        try:
+            window_open = int(slug.split("-")[-1])
+            window_close = window_open + 300
+            if now >= window_close:
+                logging.debug(f"CopyEngine: skipping trade because window {slug} has already closed.")
+                return
+        except Exception:
+            pass
+            
         cid      = trade.get("conditionId", "") or trade.get("condition_id", "")
         title    = trade.get("title", slug)
         outcome  = trade.get("outcome", "")         # "Up" or "Down"
